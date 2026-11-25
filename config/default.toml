@@ -1,0 +1,59 @@
+# goop-steppa default configuration.
+# Copy to ~/.config/goop-steppa/config.toml (done automatically by `goop-steppa run`
+# on first start) and edit freely.
+
+[server]
+listen = "127.0.0.1"
+# Port 53 needs root or CAP_NET_BIND_SERVICE. Use e.g. 5353 to run unprivileged.
+port = 53
+
+[upstream]
+# "doh" (DNS over HTTPS), "dot" (DNS over TLS), or "udp" (plain, insecure; testing only)
+protocol = "doh"
+# Quad9 by default.
+servers = ["9.9.9.9", "149.112.112.112"]
+tls_name = "dns.quad9.net"
+doh_path = "/dns-query"
+
+[filter]
+# Refresh downloaded lists this often while `run` is active (0 = never). `lists update` always works.
+refresh_hours = 24
+
+# ---------------------------------------------------------------------------
+# Blocklists. Nothing here is hardcoded in the program: edit, remove or add your own.
+# Each list is a `url` (downloaded + cached) or a local `path`. Formats (hosts,
+# adblock `||domain^`, plain domains) are auto-detected. `category` is one of:
+#   malware (red), telemetry (orange), ads (yellow)
+# All of these are free public downloads; none needs an account or API key.
+# ---------------------------------------------------------------------------
+
+[[lists]]
+name = "URLhaus malware hosts"
+url = "https://urlhaus.abuse.ch/downloads/hostfile/"
+category = "malware"
+
+[[lists]]
+name = "Hagezi threat intelligence (medium)"
+url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/tif.medium-onlydomains.txt"
+category = "malware"
+
+[[lists]]
+name = "WindowsSpyBlocker telemetry"
+url = "https://raw.githubusercontent.com/crazy-max/WindowsSpyBlocker/master/data/hosts/spy.txt"
+category = "telemetry"
+
+[[lists]]
+name = "EasyPrivacy"
+url = "https://easylist.to/easylist/easyprivacy.txt"
+category = "ads"
+
+[[lists]]
+name = "Hagezi Pro"
+url = "https://raw.githubusercontent.com/hagezi/dns-blocklists/main/wildcard/pro-onlydomains.txt"
+category = "ads"
+
+# Example of a local list:
+# [[lists]]
+# name = "my-list"
+# path = "/home/me/my-hosts.txt"
+# category = "ads"
