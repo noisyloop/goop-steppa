@@ -4,6 +4,7 @@ use super::attribution::{NoAttribution, ProcessAttributor};
 use super::upstream::Upstream;
 use crate::category::{Action, Verdict};
 use crate::config::ServerConfig;
+use crate::filter::engine::FIREFOX_CANARY;
 use anyhow::{Context, Result};
 use hickory_proto::op::{Header, HeaderCounts, Metadata, ResponseCode};
 use hickory_proto::rr::rdata::{A, AAAA};
@@ -63,7 +64,11 @@ impl RequestHandler for Handler {
         let verdict = (self.decide)(&domain);
         tracing::debug!(%domain, ?qtype, action = verdict.action.as_str(), category = %verdict.category, "query");
 
-        let result = if verdict.action == Action::Blocked {
+        let result = if verdict.action == Action::Blocked && domain == FIREFOX_CANARY {
+            // Firefox disables its built-in DoH when the canary fails to resolve.
+            meta.response_code = ResponseCode::NXDomain;
+            response_handle.send_response(builder.build_no_records(meta)).await
+        } else if verdict.action == Action::Blocked {
             let rec: Option<Record> = match qtype {
                 RecordType::A => Some(Record::from_rdata(qname, BLOCK_TTL, RData::A(A(Ipv4Addr::UNSPECIFIED)))),
                 RecordType::AAAA => Some(Record::from_rdata(qname, BLOCK_TTL, RData::AAAA(AAAA(Ipv6Addr::UNSPECIFIED)))),

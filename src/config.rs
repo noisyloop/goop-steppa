@@ -2,6 +2,7 @@
 
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
+use crate::category::Category;
 use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
@@ -12,6 +13,37 @@ pub const DEFAULT_CONFIG: &str = include_str!("../config/default.toml");
 pub struct Config {
     pub server: ServerConfig,
     pub upstream: UpstreamConfig,
+    pub filter: FilterConfig,
+    pub lists: Vec<ListConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct FilterConfig {
+    /// Refresh URL lists this often while running. 0 disables scheduled refresh.
+    pub refresh_hours: u64,
+}
+
+impl Default for FilterConfig {
+    fn default() -> Self {
+        Self { refresh_hours: 24 }
+    }
+}
+
+/// A blocklist: either a `url` (downloaded and cached) or a local `path`.
+/// Hosts, adblock (`||domain^`) and plain-domain formats are auto-detected.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ListConfig {
+    pub name: String,
+    pub url: Option<String>,
+    pub path: Option<std::path::PathBuf>,
+    pub category: Category,
+    #[serde(default = "yes")]
+    pub enabled: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,6 +95,12 @@ pub fn config_dir() -> Result<PathBuf> {
     Ok(d.config_dir().to_path_buf())
 }
 
+pub fn data_dir() -> Result<PathBuf> {
+    let d = directories::ProjectDirs::from("", "", "goop-steppa")
+        .context("cannot determine home directory")?;
+    Ok(d.data_dir().to_path_buf())
+}
+
 pub fn default_config_path() -> Result<PathBuf> {
     Ok(config_dir()?.join("config.toml"))
 }
@@ -102,6 +140,8 @@ mod tests {
         assert_eq!(c.server.port, 53);
         assert_eq!(c.upstream.protocol, UpstreamProtocol::Doh);
         assert_eq!(c.upstream.servers.len(), 2);
+        assert!(c.lists.len() >= 3, "default config should ship lists");
+        assert!(c.lists.iter().all(|l| l.url.is_some()));
     }
 
     #[test]
