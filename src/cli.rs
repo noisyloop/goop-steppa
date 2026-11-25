@@ -21,7 +21,12 @@ pub enum Command {
         /// Override listen port
         #[arg(long)]
         port: Option<u16>,
+        /// Show the live color-coded terminal view while running (logs go to a file)
+        #[arg(long)]
+        tui: bool,
     },
+    /// Live terminal view of a running instance (tails the query history)
+    Tui,
     /// Add a domain (and its subdomains) to your blocklist
     Block {
         /// Domain or URL

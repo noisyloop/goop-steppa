@@ -68,3 +68,16 @@ pub fn dim(text: &str, on: bool) -> String {
         text.to_string()
     }
 }
+
+/// Same palette for the ratatui view.
+pub fn tui_color(c: Category) -> ratatui::style::Color {
+    use ratatui::style::Color as C;
+    match c {
+        Category::Malware => C::Indexed(9),
+        Category::Telemetry => C::Indexed(208),
+        Category::Ads => C::Indexed(11),
+        Category::Allowed => C::Indexed(12),
+        Category::Clean => C::Indexed(10),
+        Category::Unknown => C::Indexed(245),
+    }
+}

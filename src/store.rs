@@ -14,6 +14,7 @@ pub struct Store {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Row {
+    pub id: i64,
     pub ts_ms: i64,
     pub domain: String,
     pub qtype: String,
@@ -137,7 +138,7 @@ impl Store {
     pub fn recent(&self, since_ms: i64, limit: usize, cat: Option<Category>) -> Result<Vec<Row>> {
         let c = self.conn.lock().unwrap();
         let mut st = c.prepare(
-            "SELECT ts, domain, qtype, action, category, source FROM queries
+            "SELECT ts, domain, qtype, action, category, source, id FROM queries
              WHERE ts >= ?1 AND (?2 IS NULL OR category = ?2) ORDER BY ts DESC, id DESC LIMIT ?3",
         )?;
         let rows = st
@@ -151,6 +152,31 @@ impl Store {
                     action: parse_action(&act),
                     category: cat.parse().unwrap_or(Category::Unknown),
                     source: r.get(5)?,
+                    id: r.get(6)?,
+                })
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        Ok(rows)
+    }
+
+    /// Rows with id > `after_id`, oldest first (for live tailing from another process).
+    pub fn after_id(&self, after_id: i64, limit: usize) -> Result<Vec<Row>> {
+        let c = self.conn.lock().unwrap();
+        let mut st = c.prepare(
+            "SELECT ts, domain, qtype, action, category, source, id FROM queries WHERE id > ?1 ORDER BY id LIMIT ?2",
+        )?;
+        let rows = st
+            .query_map(params![after_id, limit as i64], |r| {
+                let act: String = r.get(3)?;
+                let cat: String = r.get(4)?;
+                Ok(Row {
+                    ts_ms: r.get(0)?,
+                    domain: r.get(1)?,
+                    qtype: r.get(2)?,
+                    action: parse_action(&act),
+                    category: cat.parse().unwrap_or(Category::Unknown),
+                    source: r.get(5)?,
+                    id: r.get(6)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -236,6 +262,17 @@ mod tests {
         let m = s.recent(0, 10, Some(Category::Malware)).unwrap();
         assert_eq!(m.len(), 1);
         assert_eq!(m[0].action, Action::Blocked);
+    }
+
+    #[test]
+    fn tailing_by_id() {
+        let s = seeded();
+        let all = s.after_id(0, 100).unwrap();
+        assert_eq!(all.len(), 5);
+        assert!(all.windows(2).all(|w| w[0].id < w[1].id));
+        let tail = s.after_id(all[2].id, 100).unwrap();
+        assert_eq!(tail.iter().map(|r| r.domain.as_str()).collect::<Vec<_>>(), vec!["c.com", "d.com"]);
+        assert!(s.after_id(all[4].id, 100).unwrap().is_empty());
     }
 
     #[test]

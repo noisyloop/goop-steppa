@@ -11,6 +11,35 @@ use std::path::{Path, PathBuf};
 use std::sync::{Mutex, RwLock};
 use std::time::{Duration, SystemTime};
 
+/// Just the user's own block/allow files (no list data loaded). Cheap to construct; used by the TUI/web.
+#[derive(Clone, Debug)]
+pub struct UserFiles {
+    pub block_path: PathBuf,
+    pub allow_path: PathBuf,
+}
+
+impl UserFiles {
+    pub fn new() -> Result<Self> {
+        let dir = config::config_dir()?;
+        Ok(Self { block_path: dir.join("blocklist.txt"), allow_path: dir.join("allowlist.txt") })
+    }
+
+    pub fn block(&self, domain: &str, category: Category) -> Result<()> {
+        edit_user_file(&self.allow_path, domain, None)?; // blocking supersedes an earlier allow
+        edit_user_file(&self.block_path, domain, Some(Some(category)))
+    }
+
+    pub fn allow(&self, domain: &str) -> Result<()> {
+        edit_user_file(&self.allow_path, domain, Some(None))
+    }
+
+    /// Remove from both user lists.
+    pub fn forget(&self, domain: &str) -> Result<()> {
+        edit_user_file(&self.allow_path, domain, None)?;
+        edit_user_file(&self.block_path, domain, None)
+    }
+}
+
 pub struct Filter {
     engine: RwLock<Engine>,
     lists: Vec<ListConfig>,
@@ -100,23 +129,25 @@ impl Filter {
         }
     }
 
+    fn files(&self) -> UserFiles {
+        UserFiles { block_path: self.block_path.clone(), allow_path: self.allow_path.clone() }
+    }
+
     pub fn block(&self, domain: &str, category: Category) -> Result<()> {
-        edit_user_file(&self.allow_path, domain, None)?; // blocking supersedes an earlier allow
-        edit_user_file(&self.block_path, domain, Some(Some(category)))?;
+        self.files().block(domain, category)?;
         self.refresh_user();
         Ok(())
     }
 
     pub fn allow(&self, domain: &str) -> Result<()> {
-        edit_user_file(&self.allow_path, domain, Some(None))?;
+        self.files().allow(domain)?;
         self.refresh_user();
         Ok(())
     }
 
     /// Remove from both user lists.
     pub fn forget(&self, domain: &str) -> Result<()> {
-        edit_user_file(&self.allow_path, domain, None)?;
-        edit_user_file(&self.block_path, domain, None)?;
+        self.files().forget(domain)?;
         self.refresh_user();
         Ok(())
     }

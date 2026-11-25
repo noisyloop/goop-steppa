@@ -7,6 +7,7 @@ mod filter;
 mod report;
 mod store;
 mod theme;
+mod tui;
 
 use anyhow::Result;
 use clap::Parser;
@@ -17,17 +18,24 @@ use std::time::Duration;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
-        .init();
     let cli = Cli::parse();
+    init_tracing(matches!(cli.command, Command::Run { tui: true, .. } | Command::Tui));
     let mut cfg = config::Config::load(cli.config.as_deref())?;
     match cli.command {
-        Command::Run { port } => {
+        Command::Run { port, tui } => {
             if let Some(p) = port {
                 cfg.server.port = p;
             }
-            run(cfg).await
+            if tui {
+                run_with_tui(cfg).await
+            } else {
+                run(cfg).await
+            }
+        }
+        Command::Tui => {
+            let store = store::Store::open(&cfg.storage.db_path()?)?;
+            let files = filter::UserFiles::new()?;
+            tokio::task::spawn_blocking(move || tui::run(&store, &files)).await?
         }
         Command::Block { domain, category } => {
             let d = parse_domain(&domain)?;
@@ -97,6 +105,46 @@ async fn main() -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// Logs go to stderr normally; when a TUI owns the terminal they go to a file instead.
+fn init_tracing(tui: bool) {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
+    if tui {
+        let file = config::data_dir().ok().and_then(|d| {
+            std::fs::create_dir_all(&d).ok()?;
+            std::fs::OpenOptions::new().create(true).append(true).open(d.join("goop-steppa.log")).ok()
+        });
+        if let Some(f) = file {
+            tracing_subscriber::fmt().with_env_filter(filter).with_ansi(false).with_writer(std::sync::Mutex::new(f)).init();
+            return;
+        }
+        tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::sink).init();
+    } else {
+        tracing_subscriber::fmt().with_env_filter(filter).init();
+    }
+}
+
+/// Server in the background, TUI in the foreground. Startup errors (e.g. port in use) are shown
+/// on the normal screen before the TUI takes over.
+async fn run_with_tui(cfg: config::Config) -> Result<()> {
+    let db = cfg.storage.db_path()?;
+    let mut server = tokio::spawn(run(cfg));
+    tokio::select! {
+        r = &mut server => {
+            return match r {
+                Ok(Ok(())) => Ok(()),
+                Ok(Err(e)) => Err(e),
+                Err(e) => Err(e.into()),
+            };
+        }
+        _ = tokio::time::sleep(Duration::from_millis(700)) => {}
+    }
+    let store = store::Store::open(&db)?;
+    let files = filter::UserFiles::new()?;
+    let res = tokio::task::spawn_blocking(move || tui::run(&store, &files)).await?;
+    server.abort();
+    res
 }
 
 fn parse_domain(s: &str) -> Result<String> {
