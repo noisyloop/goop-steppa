@@ -5,6 +5,7 @@ mod dns;
 mod event;
 mod filter;
 mod report;
+mod scan;
 mod store;
 mod theme;
 mod tui;
@@ -20,7 +21,7 @@ use std::time::Duration;
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
-    init_tracing(matches!(cli.command, Command::Run { tui: true, .. } | Command::Tui));
+    init_tracing(matches!(cli.command, Command::Run { tui: true, .. } | Command::Tui), matches!(cli.command, Command::Run { .. }));
     let mut cfg = config::Config::load(cli.config.as_deref())?;
     match cli.command {
         Command::Run { port, tui, no_web } => {
@@ -99,6 +100,39 @@ async fn main() -> Result<()> {
             print!("{}", report::render(&data, color.enabled()));
             Ok(())
         }
+        Command::Scan { files, flagged, all, json, max_size, color } => {
+            let filter = Filter::new(&cfg)?;
+            // Read-only look at the DNS history: only used to tell "seen before" (green) from "new" (grey).
+            let db = cfg.storage.db_path()?;
+            let seen: std::collections::HashSet<String> = if db.exists() {
+                store::Store::open(&db).and_then(|s| s.seen_domains()).unwrap_or_default().into_iter().collect()
+            } else {
+                Default::default()
+            };
+            let opts = scan::render::RenderOpts { color: color.enabled(), flagged_only: flagged, all };
+            let mut results = Vec::new();
+            let mut failed = false;
+            for path in &files {
+                match scan::read_file(path, max_size << 20) {
+                    Ok(bytes) => results.push(scan::scan_bytes(&path.display().to_string(), &bytes, &filter, &seen)),
+                    Err(e) => {
+                        eprintln!("{}: {e:#}", path.display());
+                        failed = true;
+                    }
+                }
+            }
+            if json {
+                println!("{}", serde_json::to_string_pretty(&results)?);
+            } else {
+                for r in &results {
+                    print!("{}\n", scan::render::render(r, &opts));
+                }
+            }
+            if failed {
+                std::process::exit(2);
+            }
+            Ok(())
+        }
         Command::Check { domains } => {
             let f = Filter::new(&cfg)?;
             for d in domains {
@@ -112,8 +146,11 @@ async fn main() -> Result<()> {
 }
 
 /// Logs go to stderr normally; when a TUI owns the terminal they go to a file instead.
-fn init_tracing(tui: bool) {
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into());
+/// One-shot commands (report, scan, ...) only log warnings by default; `run` logs info. Logs never
+/// go to stdout, so machine-readable output (`scan --json`) stays clean.
+fn init_tracing(tui: bool, long_running: bool) {
+    let default = if long_running { "info" } else { "warn" };
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| default.into());
     if tui {
         let file = config::data_dir().ok().and_then(|d| {
             std::fs::create_dir_all(&d).ok()?;
@@ -125,7 +162,7 @@ fn init_tracing(tui: bool) {
         }
         tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::sink).init();
     } else {
-        tracing_subscriber::fmt().with_env_filter(filter).init();
+        tracing_subscriber::fmt().with_env_filter(filter).with_writer(std::io::stderr).init();
     }
 }
 
