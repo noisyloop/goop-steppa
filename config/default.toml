@@ -57,3 +57,12 @@ category = "ads"
 # name = "my-list"
 # path = "/home/me/my-hosts.txt"
 # category = "ads"
+
+[storage]
+# path = "/custom/history.db"   # default: ~/.local/share/goop-steppa/history.db
+retention_days = 30             # 0 = keep forever
+
+[web]
+# Dashboard at http://127.0.0.1:<port>/ . Always bound to 127.0.0.1 (not configurable).
+enabled = true
+port = 8053

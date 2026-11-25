@@ -1,4 +1,5 @@
 use crate::category::Category;
+use crate::theme::ColorMode;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -20,7 +21,15 @@ pub enum Command {
         /// Override listen port
         #[arg(long)]
         port: Option<u16>,
+        /// Show the live color-coded terminal view while running (logs go to a file)
+        #[arg(long)]
+        tui: bool,
+        /// Do not start the web dashboard
+        #[arg(long)]
+        no_web: bool,
     },
+    /// Live terminal view of a running instance (tails the query history)
+    Tui,
     /// Add a domain (and its subdomains) to your blocklist
     Block {
         /// Domain or URL
@@ -43,6 +52,43 @@ pub enum Command {
     Lists {
         #[command(subcommand)]
         action: ListsAction,
+    },
+    /// Show a color-coded summary of what your DNS queries looked like
+    Report {
+        /// Time window: 30m, 24h, 7d, all
+        #[arg(long, default_value = "24h")]
+        since: String,
+        /// Rows in each "top domains" table
+        #[arg(long, default_value_t = 8)]
+        top: usize,
+        /// Also list this many most recent queries
+        #[arg(long, default_value_t = 0)]
+        recent: usize,
+        /// Only show this category (malware | telemetry | ads | allowed | clean | unknown)
+        #[arg(long, short)]
+        category: Option<Category>,
+        #[arg(long, value_enum, default_value_t = ColorMode::Auto)]
+        color: ColorMode,
+    },
+    /// Extract every URL/domain from files (text, HTML, PDF, binaries) and check them. Read-only: nothing is opened or executed.
+    Scan {
+        /// File(s) to scan
+        #[arg(required = true)]
+        files: Vec<PathBuf>,
+        /// Only show domains that are blocked by a list
+        #[arg(long)]
+        flagged: bool,
+        /// List every unflagged domain (default: first 25)
+        #[arg(long)]
+        all: bool,
+        /// Machine-readable output
+        #[arg(long)]
+        json: bool,
+        /// Refuse files larger than this many MiB
+        #[arg(long, default_value_t = 256)]
+        max_size: u64,
+        #[arg(long, value_enum, default_value_t = ColorMode::Auto)]
+        color: ColorMode,
     },
     /// Check domains against the current lists (no network)
     Check {

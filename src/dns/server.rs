@@ -4,6 +4,7 @@ use super::attribution::{NoAttribution, ProcessAttributor};
 use super::upstream::Upstream;
 use crate::category::{Action, Verdict};
 use crate::config::ServerConfig;
+use crate::event::{EventTx, QueryEvent};
 use crate::filter::engine::FIREFOX_CANARY;
 use anyhow::{Context, Result};
 use hickory_proto::op::{Header, HeaderCounts, Metadata, ResponseCode};
@@ -25,13 +26,14 @@ const BLOCK_TTL: u32 = 60;
 pub struct Handler {
     upstream: Upstream,
     decide: Decider,
+    events: EventTx,
     #[allow(dead_code)] // seam for per-process attribution (post-v1)
     attributor: Arc<dyn ProcessAttributor>,
 }
 
 impl Handler {
-    pub fn new(upstream: Upstream, decide: Decider) -> Self {
-        Self { upstream, decide, attributor: Arc::new(NoAttribution) }
+    pub fn new(upstream: Upstream, decide: Decider, events: EventTx) -> Self {
+        Self { upstream, decide, events, attributor: Arc::new(NoAttribution) }
     }
 }
 
@@ -62,6 +64,8 @@ impl RequestHandler for Handler {
         let qtype = info.query.query_type();
         let domain = normalize(&qname.to_string());
         let verdict = (self.decide)(&domain);
+        // No receivers (nobody logging) is fine.
+        let _ = self.events.send(QueryEvent::new(&domain, &qtype.to_string(), &verdict, request.src().ip()));
         tracing::debug!(%domain, ?qtype, action = verdict.action.as_str(), category = %verdict.category, "query");
 
         let result = if verdict.action == Action::Blocked && domain == FIREFOX_CANARY {

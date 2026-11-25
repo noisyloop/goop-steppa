@@ -14,7 +14,47 @@ pub struct Config {
     pub server: ServerConfig,
     pub upstream: UpstreamConfig,
     pub filter: FilterConfig,
+    pub storage: StorageConfig,
+    pub web: WebConfig,
     pub lists: Vec<ListConfig>,
+}
+
+/// The dashboard always binds to 127.0.0.1; only the port is configurable.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WebConfig {
+    pub enabled: bool,
+    pub port: u16,
+}
+
+impl Default for WebConfig {
+    fn default() -> Self {
+        Self { enabled: true, port: 8053 }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct StorageConfig {
+    /// SQLite history file (default: ~/.local/share/goop-steppa/history.db)
+    pub path: Option<PathBuf>,
+    /// Delete history older than this many days on startup. 0 keeps everything.
+    pub retention_days: u32,
+}
+
+impl Default for StorageConfig {
+    fn default() -> Self {
+        Self { path: None, retention_days: 30 }
+    }
+}
+
+impl StorageConfig {
+    pub fn db_path(&self) -> Result<PathBuf> {
+        match &self.path {
+            Some(p) => Ok(p.clone()),
+            None => Ok(data_dir()?.join("history.db")),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
