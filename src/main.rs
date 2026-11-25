@@ -7,6 +7,7 @@ mod filter;
 mod report;
 mod scan;
 mod store;
+mod system;
 mod theme;
 mod tui;
 mod web;
@@ -18,8 +19,16 @@ use filter::{parse::domain_from_input, Filter};
 use std::sync::Arc;
 use std::time::Duration;
 
-#[tokio::main]
-async fn main() -> Result<()> {
+fn main() {
+    let rt = tokio::runtime::Builder::new_multi_thread().enable_all().build().expect("starting async runtime");
+    if let Err(e) = rt.block_on(real_main()) {
+        // One readable line (plus causes), never a backtrace, whatever RUST_BACKTRACE says.
+        eprintln!("error: {e:#}");
+        std::process::exit(1);
+    }
+}
+
+async fn real_main() -> Result<()> {
     let cli = Cli::parse();
     init_tracing(matches!(cli.command, Command::Run { tui: true, .. } | Command::Tui), matches!(cli.command, Command::Run { .. }));
     let mut cfg = config::Config::load(cli.config.as_deref())?;
@@ -130,6 +139,47 @@ async fn main() -> Result<()> {
             }
             if failed {
                 std::process::exit(2);
+            }
+            Ok(())
+        }
+        Command::Setup { apply, revert, verify, port, force } => {
+            let port = port.unwrap_or(cfg.server.port);
+            let runner = system::RealRunner;
+            let sys = system::Sys::new("/", &runner);
+            let need_root = |what: &str| -> Result<()> {
+                if system::is_root() {
+                    return Ok(());
+                }
+                anyhow::bail!(
+                    "{what} needs root. Run:\n  sudo {} setup --{what} --port {port}",
+                    std::env::current_exe().map(|p| p.display().to_string()).unwrap_or_else(|_| "goop-steppa".into())
+                )
+            };
+            if apply {
+                need_root("apply")?;
+                let log = sys.apply(port, &system::probe_dns, force)?;
+                log.iter().for_each(|l| println!("  {l}"));
+                println!("\nDone. Check it with:  goop-steppa setup --verify\nUndo with:           sudo goop-steppa setup --revert");
+            } else if revert {
+                need_root("revert")?;
+                sys.revert()?.iter().for_each(|l| println!("  {l}"));
+            } else if verify {
+                let db = cfg.storage.db_path()?;
+                if !db.exists() {
+                    anyhow::bail!("no history database at {}: is goop-steppa running?", db.display());
+                }
+                let store = store::Store::open(&db)?;
+                if sys.verify(&store, Duration::from_secs(5))? {
+                    println!("OK: a query made through the system resolver reached goop-steppa.");
+                } else {
+                    println!("NOT OK: a query made through the system resolver did not show up in goop-steppa's history.");
+                    println!("  - Is goop-steppa running, and is `setup --apply` done?");
+                    println!("  - Per-link DNS (DHCP/NetworkManager) may take precedence. Inspect with: resolvectl status");
+                    println!("    and consider: resolvectl default-route <link> no   (see the README, 'Troubleshooting').");
+                    std::process::exit(1);
+                }
+            } else {
+                print!("{}", sys.plan(port));
             }
             Ok(())
         }
