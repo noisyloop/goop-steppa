@@ -2,7 +2,11 @@ mod category;
 mod cli;
 mod config;
 mod dns;
+mod event;
 mod filter;
+mod report;
+mod store;
+mod theme;
 
 use anyhow::Result;
 use clap::Parser;
@@ -69,6 +73,20 @@ async fn main() -> Result<()> {
             println!("  {:<32} {:<10} {ub} blocked, {ua} allowed", "your lists", "user");
             Ok(())
         }
+        Command::Report { since, top, recent, category, color } => {
+            let store = store::Store::open(&cfg.storage.db_path()?)?;
+            let window = report::parse_window(&since)?;
+            let opts = report::Options {
+                since_ms: report::since_ms(window, chrono::Utc::now().timestamp_millis()),
+                window_label: if since == "all" { "all time".into() } else { since.clone() },
+                top,
+                recent,
+                category,
+            };
+            let data = report::gather(&store, &opts)?;
+            print!("{}", report::render(&data, color.enabled()));
+            Ok(())
+        }
         Command::Check { domains } => {
             let f = Filter::new(&cfg)?;
             for d in domains {
@@ -117,9 +135,25 @@ async fn run(cfg: config::Config) -> Result<()> {
         });
     }
 
+    // History: every query event is written to SQLite; domains seen before stay green, new ones turn grey.
+    let store = Arc::new(store::Store::open(&cfg.storage.db_path()?)?);
+    if cfg.storage.retention_days > 0 {
+        let cutoff = chrono::Utc::now().timestamp_millis() - cfg.storage.retention_days as i64 * 86_400_000;
+        let n = store.prune_older_than(cutoff)?;
+        if n > 0 {
+            tracing::info!("pruned {n} history rows older than {} days", cfg.storage.retention_days);
+        }
+    }
+    let seen = Arc::new(event::Seen::from_domains(store.seen_domains()?));
+    let events = event::channel();
+    spawn_logger(store.clone(), events.subscribe());
+
     let f = filter.clone();
-    let decide: dns::server::Decider = Arc::new(move |d| f.check(d));
-    let handler = dns::server::Handler::new(upstream, decide);
+    let decide: dns::server::Decider = Arc::new(move |d| {
+        let v = f.check(d);
+        event::apply_first_seen(v, seen.first_time(d))
+    });
+    let handler = dns::server::Handler::new(upstream, decide, events);
     dns::server::serve(&cfg.server, handler, async {
         let _ = tokio::signal::ctrl_c().await;
     })
@@ -133,4 +167,38 @@ fn log_reports(reports: Vec<filter::UpdateReport>) {
             Err(e) => tracing::warn!(list = %r.name, "list update failed: {e}"),
         }
     }
+}
+
+/// Batches query events into SQLite so logging never slows down DNS answers.
+fn spawn_logger(store: Arc<store::Store>, mut rx: tokio::sync::broadcast::Receiver<event::QueryEvent>) {
+    use tokio::sync::broadcast::error::{RecvError, TryRecvError};
+    tokio::spawn(async move {
+        loop {
+            let mut batch = Vec::new();
+            match rx.recv().await {
+                Ok(e) => batch.push(e),
+                Err(RecvError::Lagged(n)) => {
+                    tracing::warn!("history logger lagged; {n} events dropped");
+                    continue;
+                }
+                Err(RecvError::Closed) => return,
+            }
+            // Gather whatever else arrived within a short window.
+            tokio::time::sleep(Duration::from_millis(200)).await;
+            loop {
+                match rx.try_recv() {
+                    Ok(e) => batch.push(e),
+                    Err(TryRecvError::Lagged(n)) => tracing::warn!("history logger lagged; {n} events dropped"),
+                    Err(_) => break,
+                }
+                if batch.len() >= 1000 {
+                    break;
+                }
+            }
+            let st = store.clone();
+            if let Err(e) = tokio::task::spawn_blocking(move || st.insert_batch(&batch)).await.unwrap_or_else(|e| Err(e.into())) {
+                tracing::error!("writing history failed: {e:#}");
+            }
+        }
+    });
 }

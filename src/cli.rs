@@ -1,4 +1,5 @@
 use crate::category::Category;
+use crate::theme::ColorMode;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
@@ -43,6 +44,23 @@ pub enum Command {
     Lists {
         #[command(subcommand)]
         action: ListsAction,
+    },
+    /// Show a color-coded summary of what your DNS queries looked like
+    Report {
+        /// Time window: 30m, 24h, 7d, all
+        #[arg(long, default_value = "24h")]
+        since: String,
+        /// Rows in each "top domains" table
+        #[arg(long, default_value_t = 8)]
+        top: usize,
+        /// Also list this many most recent queries
+        #[arg(long, default_value_t = 0)]
+        recent: usize,
+        /// Only show this category (malware | telemetry | ads | allowed | clean | unknown)
+        #[arg(long, short)]
+        category: Option<Category>,
+        #[arg(long, value_enum, default_value_t = ColorMode::Auto)]
+        color: ColorMode,
     },
     /// Check domains against the current lists (no network)
     Check {

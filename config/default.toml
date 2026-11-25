@@ -57,3 +57,7 @@ category = "ads"
 # name = "my-list"
 # path = "/home/me/my-hosts.txt"
 # category = "ads"
+
+[storage]
+# path = "/custom/history.db"   # default: ~/.local/share/goop-steppa/history.db
+retention_days = 30             # 0 = keep forever
