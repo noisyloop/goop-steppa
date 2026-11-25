@@ -8,6 +8,7 @@ mod report;
 mod store;
 mod theme;
 mod tui;
+mod web;
 
 use anyhow::Result;
 use clap::Parser;
@@ -22,9 +23,12 @@ async fn main() -> Result<()> {
     init_tracing(matches!(cli.command, Command::Run { tui: true, .. } | Command::Tui));
     let mut cfg = config::Config::load(cli.config.as_deref())?;
     match cli.command {
-        Command::Run { port, tui } => {
+        Command::Run { port, tui, no_web } => {
             if let Some(p) = port {
                 cfg.server.port = p;
+            }
+            if no_web {
+                cfg.web.enabled = false;
             }
             if tui {
                 run_with_tui(cfg).await
@@ -195,6 +199,17 @@ async fn run(cfg: config::Config) -> Result<()> {
     let seen = Arc::new(event::Seen::from_domains(store.seen_domains()?));
     let events = event::channel();
     spawn_logger(store.clone(), events.subscribe());
+
+    if cfg.web.enabled {
+        let state = Arc::new(web::WebState { store: store.clone(), filter: filter.clone(), events: events.clone(), port: cfg.web.port });
+        let port = cfg.web.port;
+        // A busy dashboard port must not take DNS down with it: warn and carry on.
+        tokio::spawn(async move {
+            if let Err(e) = web::serve(port, state, std::future::pending()).await {
+                tracing::warn!("dashboard disabled: {e:#}");
+            }
+        });
+    }
 
     let f = filter.clone();
     let decide: dns::server::Decider = Arc::new(move |d| {

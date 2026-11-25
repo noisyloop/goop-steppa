@@ -24,6 +24,9 @@ pub enum Command {
         /// Show the live color-coded terminal view while running (logs go to a file)
         #[arg(long)]
         tui: bool,
+        /// Do not start the web dashboard
+        #[arg(long)]
+        no_web: bool,
     },
     /// Live terminal view of a running instance (tails the query history)
     Tui,

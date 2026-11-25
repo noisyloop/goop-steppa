@@ -24,7 +24,7 @@ impl QueryEvent {
     pub fn new(domain: &str, qtype: &str, v: &Verdict, client: IpAddr) -> Self {
         QueryEvent {
             ts_ms: chrono::Utc::now().timestamp_millis(),
-            domain: domain.to_string(),
+            domain: sanitize(domain),
             qtype: qtype.to_string(),
             action: v.action,
             category: v.category,
@@ -32,6 +32,12 @@ impl QueryEvent {
             client,
         }
     }
+}
+
+/// Query names are attacker-controlled (any web page can make us look up any name). Replace anything
+/// that isn't a plain printable ASCII character so it can't inject terminal escapes or markup later.
+pub fn sanitize(s: &str) -> String {
+    s.chars().map(|c| if c.is_ascii_graphic() && !matches!(c, '<' | '>' | '"' | '\'' | '&' | '`') { c } else { '?' }).collect()
 }
 
 pub type EventTx = broadcast::Sender<QueryEvent>;
@@ -89,6 +95,16 @@ mod tests {
         assert_eq!(apply_first_seen(blocked, true).category, Category::Malware);
         let allowed = Verdict { action: Action::Allowed, category: Category::Allowed, source: None };
         assert_eq!(apply_first_seen(allowed, true).category, Category::Allowed);
+    }
+
+    #[test]
+    fn hostile_names_are_neutralised() {
+        assert_eq!(sanitize("evil\x1b[31m.com"), "evil?[31m.com");
+        assert_eq!(sanitize("<img src=x onerror=alert(1)>.com"), "?img?src=x?onerror=alert(1)?.com");
+        assert_eq!(sanitize("ok-1.example.com"), "ok-1.example.com");
+        let v = Verdict::pass(Category::Clean);
+        let e = QueryEvent::new("a\nb.com", "A", &v, "127.0.0.1".parse().unwrap());
+        assert_eq!(e.domain, "a?b.com");
     }
 
     #[test]

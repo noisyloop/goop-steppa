@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>goop-steppa</title>
+<link rel="stylesheet" href="/app.css">
+<script src="/app.js" defer></script>
+</head>
+<body>
+<header>
+  <h1>goop-steppa</h1>
+  <span id="live" class="live off" title="Live feed connection"><span class="dot"></span><span id="live-text">connecting</span></span>
+  <span class="spacer"></span>
+  <label>Window
+    <select id="window">
+      <option value="1h">last hour</option>
+      <option value="24h" selected>last 24 hours</option>
+      <option value="7d">last 7 days</option>
+      <option value="30d">last 30 days</option>
+      <option value="all">all time</option>
+    </select>
+  </label>
+</header>
+
+<main>
+  <section id="stats" aria-label="Totals">
+    <div class="stat"><div class="n" id="s-total">-</div><div class="l">queries</div></div>
+    <div class="stat"><div class="n" id="s-blocked">-</div><div class="l">blocked</div></div>
+    <div class="stat"><div class="n" id="s-pct">-</div><div class="l">blocked share</div></div>
+  </section>
+
+  <section aria-label="Categories">
+    <div id="cats" class="cats"></div>
+    <p class="hint">Click a category to filter the live feed.</p>
+  </section>
+
+  <section aria-label="Queries over time">
+    <h2>Queries over time</h2>
+    <div id="chart" class="chart" role="img" aria-label="Bar chart of blocked and allowed queries over time"></div>
+    <div class="axis"><span id="ax-start"></span><span class="legend"><i class="sw blocked"></i>blocked <i class="sw allowed"></i>forwarded</span><span id="ax-end"></span></div>
+  </section>
+
+  <section aria-label="Top domains">
+    <h2>Top domains by category</h2>
+    <div id="tops" class="tops"></div>
+  </section>
+
+  <section aria-label="Live feed">
+    <h2>Live feed</h2>
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Filter domains..." autocomplete="off" spellcheck="false">
+      <button id="pause" type="button">Pause</button>
+      <button id="clear" type="button">Clear filters</button>
+    </div>
+    <div class="tablewrap">
+      <table id="feed">
+        <thead><tr><th>time</th><th>verdict</th><th>category</th><th>type</th><th>domain</th><th>list</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p id="empty" class="hint" hidden>No matching queries yet. Is your system resolver pointed at goop-steppa?</p>
+  </section>
+
+  <section class="notes">
+    <h2>Notes</h2>
+    <ul>
+      <li>Chrome, Brave and Edge may bypass local DNS with their own "Secure DNS". Turn it off in the browser or their lookups will not appear here.</li>
+      <li>Blocking or allowing a domain also applies to all of its subdomains. The allowlist always wins.</li>
+    </ul>
+  </section>
+</main>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>

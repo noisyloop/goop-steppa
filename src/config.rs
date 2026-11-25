@@ -15,7 +15,22 @@ pub struct Config {
     pub upstream: UpstreamConfig,
     pub filter: FilterConfig,
     pub storage: StorageConfig,
+    pub web: WebConfig,
     pub lists: Vec<ListConfig>,
+}
+
+/// The dashboard always binds to 127.0.0.1; only the port is configurable.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct WebConfig {
+    pub enabled: bool,
+    pub port: u16,
+}
+
+impl Default for WebConfig {
+    fn default() -> Self {
+        Self { enabled: true, port: 8053 }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

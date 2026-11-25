@@ -12,7 +12,7 @@ pub struct Store {
     conn: Mutex<Connection>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Row {
     pub id: i64,
     pub ts_ms: i64,
