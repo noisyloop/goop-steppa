@@ -7,6 +7,9 @@ use std::net::IpAddr;
 use std::path::{Path, PathBuf};
 
 pub const DEFAULT_CONFIG: &str = include_str!("../config/default.toml");
+/// Shipped starter list; written to `<config dir>/lists/` (only if missing) so the user can edit it.
+pub const LINUX_TELEMETRY_LIST: &str = include_str!("../config/lists/linux-telemetry.txt");
+pub const LINUX_TELEMETRY_FILE: &str = "lists/linux-telemetry.txt";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -164,6 +167,18 @@ impl Config {
                 .with_context(|| format!("writing default config to {}", p.display()))?;
             tracing::info!("wrote default config to {}", p.display());
         }
+        if !explicit {
+            // Never overwrite: the user may have edited it.
+            if let Some(dir) = p.parent() {
+                let list = dir.join(LINUX_TELEMETRY_FILE);
+                if !list.exists() {
+                    if let Some(lp) = list.parent() {
+                        std::fs::create_dir_all(lp)?;
+                    }
+                    std::fs::write(&list, LINUX_TELEMETRY_LIST).with_context(|| format!("writing {}", list.display()))?;
+                }
+            }
+        }
         let text = std::fs::read_to_string(&p)
             .with_context(|| format!("reading {}", p.display()))?;
         toml::from_str(&text).with_context(|| format!("parsing {}", p.display()))
@@ -180,8 +195,19 @@ mod tests {
         assert_eq!(c.server.port, 53);
         assert_eq!(c.upstream.protocol, UpstreamProtocol::Doh);
         assert_eq!(c.upstream.servers.len(), 2);
-        assert!(c.lists.len() >= 3, "default config should ship lists");
-        assert!(c.lists.iter().all(|l| l.url.is_some()));
+        assert!(c.lists.len() >= 4, "default config should ship lists");
+        assert!(c.lists.iter().any(|l| l.url.is_some()));
+        let local: Vec<_> = c.lists.iter().filter(|l| l.path.is_some()).collect();
+        assert_eq!(local.len(), 1, "exactly the Linux starter list is local");
+        assert_eq!(local[0].path.as_deref(), Some(std::path::Path::new(LINUX_TELEMETRY_FILE)));
+    }
+
+    #[test]
+    fn shipped_linux_list_is_usable() {
+        let d = crate::filter::parse::parse_list(LINUX_TELEMETRY_LIST);
+        assert!(d.len() >= 8, "{d:?}");
+        assert!(d.contains(&"motd.ubuntu.com".to_string()) && d.contains(&"popcon.debian.org".to_string()));
+        assert!(d.iter().all(|x| !x.contains(' ') && x.contains('.')), "comments must not leak in as domains: {d:?}");
     }
 
     #[test]

@@ -1,0 +1,24 @@
+# goop-steppa starter list: telemetry and "phone home" endpoints commonly seen on Linux desktops.
+#
+# This is a SHORT, CONSERVATIVE starter list, not a complete one. It was written from known
+# public endpoints and has not been checked against your live traffic. Review it: delete lines for
+# things you want, and add your own. Find candidates with:
+#     goop-steppa report -c unknown --top 50
+# Format: one domain per line (subdomains are included automatically). Lines starting with # are comments.
+
+# --- Ubuntu / Canonical ---
+motd.ubuntu.com         # MOTD "news" fetch (motd-news)
+metrics.ubuntu.com      # ubuntu-report hardware/software survey
+popcon.ubuntu.com       # popularity-contest package statistics
+daisy.ubuntu.com        # crash reports (whoopsie / apport error tracker)
+
+# --- Debian ---
+popcon.debian.org       # popularity-contest package statistics
+
+# --- Mozilla Firefox ---
+incoming.telemetry.mozilla.org
+
+# --- Microsoft developer tools (VS Code etc.) ---
+vortex.data.microsoft.com
+dc.services.visualstudio.com
+mobile.events.data.microsoft.com

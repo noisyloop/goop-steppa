@@ -86,7 +86,7 @@ impl Filter {
 
     fn cache_file(&self, l: &ListConfig) -> Option<PathBuf> {
         if let Some(p) = &l.path {
-            return Some(p.clone());
+            return Some(resolve_path(p));
         }
         l.url.as_ref()?;
         let safe: String = l.name.chars().map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '_' }).collect();
@@ -186,6 +186,21 @@ impl Filter {
         }
         reports
     }
+}
+
+/// `~/x` -> home, relative -> relative to the config directory, absolute as-is.
+fn resolve_path(p: &Path) -> PathBuf {
+    if let Ok(rest) = p.strip_prefix("~") {
+        if let Some(home) = directories::BaseDirs::new().map(|b| b.home_dir().to_path_buf()) {
+            return home.join(rest);
+        }
+    }
+    if p.is_relative() {
+        if let Ok(dir) = config::config_dir() {
+            return dir.join(p);
+        }
+    }
+    p.to_path_buf()
 }
 
 async fn fetch_to(client: &reqwest::Client, url: &str, dest: &Path) -> Result<usize> {
@@ -291,6 +306,15 @@ mod tests {
         // survives a reload from disk
         f.reload().unwrap();
         assert_eq!(f.check("x.tracker.example.com").category, Category::Malware);
+    }
+
+    #[test]
+    fn list_paths_resolve_relative_to_config_dir_and_home() {
+        let cfg = config::config_dir().unwrap();
+        assert_eq!(resolve_path(Path::new("lists/x.txt")), cfg.join("lists/x.txt"));
+        assert_eq!(resolve_path(Path::new("/abs/x.txt")), PathBuf::from("/abs/x.txt"));
+        let home = directories::BaseDirs::new().unwrap().home_dir().to_path_buf();
+        assert_eq!(resolve_path(Path::new("~/my/x.txt")), home.join("my/x.txt"));
     }
 
     #[test]

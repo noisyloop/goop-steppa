@@ -90,6 +90,24 @@ pub enum Command {
         #[arg(long, value_enum, default_value_t = ColorMode::Auto)]
         color: ColorMode,
     },
+    /// Point the system resolver (systemd-resolved) at goop-steppa. Without flags: shows a plan and changes nothing.
+    Setup {
+        /// Actually install the drop-in and restart systemd-resolved (needs root)
+        #[arg(long, conflicts_with_all = ["revert", "verify"])]
+        apply: bool,
+        /// Undo `--apply`: remove the drop-in and restart systemd-resolved (needs root)
+        #[arg(long, conflicts_with = "verify")]
+        revert: bool,
+        /// Check that the system resolver really routes through a running goop-steppa
+        #[arg(long)]
+        verify: bool,
+        /// Port goop-steppa listens on (default: from config)
+        #[arg(long)]
+        port: Option<u16>,
+        /// With --apply: skip the "is anything answering on that port?" safety check
+        #[arg(long)]
+        force: bool,
+    },
     /// Check domains against the current lists (no network)
     Check {
         domains: Vec<String>,
