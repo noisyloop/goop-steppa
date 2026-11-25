@@ -1,0 +1,24 @@
+[package]
+name = "goop-steppa"
+version = "0.1.0"
+edition = "2021"
+description = "Local DNS privacy monitor: blocks telemetry/ads/trackers/malware and shows everything it sees"
+license = "MIT"
+
+[dependencies]
+anyhow = "1"
+async-trait = "0.1"
+clap = { version = "4", features = ["derive"] }
+directories = "6"
+hickory-proto = "0.26"
+hickory-resolver = { version = "0.26", features = ["tls-ring", "https-ring", "webpki-roots"] }
+hickory-server = "0.26"
+serde = { version = "1", features = ["derive"] }
+tokio = { version = "1", features = ["full"] }
+toml = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[profile.release]
+lto = "thin"
+strip = true

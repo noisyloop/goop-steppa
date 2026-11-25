@@ -1,0 +1,16 @@
+# goop-steppa default configuration.
+# Copy to ~/.config/goop-steppa/config.toml (done automatically by `goop-steppa run`
+# on first start) and edit freely.
+
+[server]
+listen = "127.0.0.1"
+# Port 53 needs root or CAP_NET_BIND_SERVICE. Use e.g. 5353 to run unprivileged.
+port = 53
+
+[upstream]
+# "doh" (DNS over HTTPS), "dot" (DNS over TLS), or "udp" (plain, insecure; testing only)
+protocol = "doh"
+# Quad9 by default.
+servers = ["9.9.9.9", "149.112.112.112"]
+tls_name = "dns.quad9.net"
+doh_path = "/dns-query"
