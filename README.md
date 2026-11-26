@@ -373,6 +373,10 @@ and no systemd-resolved):
 - The URLhaus and EasyPrivacy default list URLs were unreachable from that environment.
 - The systemd user-service example is standard syntax but untested.
 
+## Uninstall
+
+See [UNINSTALL.md](UNINSTALL.md) (restores your DNS first, then removes the service, binary and data).
+
 ## Development
 
 ```sh
